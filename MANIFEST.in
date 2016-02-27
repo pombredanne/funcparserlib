@@ -1,2 +1,0 @@
-recursive-include doc *
-include LICENSE CHANGES.md MANIFEST.in

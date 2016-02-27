@@ -1,10 +1,3 @@
-import logging
-
-
-log = logging.getLogger('myparserlib')
-debug = False
-
-
 class Parser:
     """A wrapper around a parser function that defines some operators for parser
     composition.
@@ -25,10 +18,7 @@ class Parser:
             lambda *args, **kwargs:
                 getattr(parser, 'run', parser)(*args, **kwargs)
         )
-        if debug:
-            setattr(self, '_run', lazy_getter)
-        else:
-            setattr(self, 'run', lazy_getter)
+        self.run = lazy_getter
         self.named(getattr(parser, 'name', parser.__doc__))
 
     def run(self, tokens, state):
@@ -36,11 +26,9 @@ class Parser:
 
         Runs a parser wrapped into this object.
         """
-        if debug:
-            log.debug('trying %s' % self.name)
         return self._run(tokens, state)
 
-    def _run(self, tokens, s):
+    def _run(self, tokens, state):
         raise NotImplementedError('you must define() a parser')
 
     def parse(self, tokens):
@@ -250,12 +238,8 @@ def some(pred):
             if pred(t):
                 pos = s.pos + 1
                 s2 = State(pos, max(pos, s.max))
-                if debug:
-                    log.debug('*matched* "%s", new state = %s' % (t, s2))
                 return t, s2
             else:
-                if debug:
-                    log.debug('failed "%s", state = %s' % (t, s))
                 raise NoParseError('got unexpected token', s)
 
     _some.name = '(some)'
@@ -344,8 +328,3 @@ def forward_decl():
         raise NotImplementedError('you must define() a forward_decl somewhere')
 
     return f
-
-
-if __name__ == '__main__':
-    import doctest
-    doctest.testmod()
