@@ -1,79 +1,11 @@
-# -*- coding: utf-8 -*-
-
-# Copyright (c) 2008/2013 Andrey Vlasovskikh
-#
-# Permission is hereby granted, free of charge, to any person obtaining
-# a copy of this software and associated documentation files (the
-# "Software"), to deal in the Software without restriction, including
-# without limitation the rights to use, copy, modify, merge, publish,
-# distribute, sublicense, and/or sell copies of the Software, and to
-# permit persons to whom the Software is furnished to do so, subject to
-# the following conditions:
-#
-# The above copyright notice and this permission notice shall be included
-# in all copies or substantial portions of the Software.
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
-# EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
-# IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
-# CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
-# TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
-# SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-
-"""A recurisve descent parser library based on functional combinators.
-
-Basic combinators are taken from Harrison's book ["Introduction to Functional
-Programming"][1] and translated from ML into Python. See also [a Russian
-translation of the book][2].
-
-  [1]: http://www.cl.cam.ac.uk/teaching/Lectures/funprog-jrh-1996/
-  [2]: http://code.google.com/p/funprog-ru/
-
-A parser `p` is represented by a function of type:
-
-    p :: Sequence(a), State -> (b, State)
-
-that takes as its input a sequence of tokens of arbitrary type `a` and a
-current parsing state and return a pair of a parsed token of arbitrary type
-`b` and the new parsing state.
-
-The parsing state includes the current position in the sequence being parsed and
-the position of the rightmost token that has been consumed while parsing.
-
-Parser functions are wrapped into an object of the class `Parser`. This class
-implements custom operators `+` for sequential composition of parsers, `|` for
-choice composition, `>>` for transforming the result of parsing. The method
-`Parser.parse` provides an easier way for invoking a parser hiding details
-related to a parser state:
-
-    Parser.parse :: Parser(a, b), Sequence(a) -> b
-
-Altough this module is able to deal with a sequences of any kind of objects, the
-recommended way of using it is applying a parser to a `Sequence(Token)`.
-`Token` objects are produced by a regexp-based tokenizer defined in
-`funcparserlib.lexer`. By using it this way you get more readable parsing error
-messages (as `Token` objects contain their position in the source file) and good
-separation of lexical and syntactic levels of the grammar. See examples for more
-info.
-
-Debug messages are emitted via a `logging.Logger` object named
-`"funcparserlib"`.
-"""
-
-__all__ = [
-    'some', 'a', 'many', 'pure', 'finished', 'maybe', 'skip', 'oneplus',
-    'forward_decl', 'NoParseError',
-]
-
 import logging
 
-log = logging.getLogger('funcparserlib')
 
+log = logging.getLogger('myparserlib')
 debug = False
 
 
-class Parser(object):
+class Parser:
     """A wrapper around a parser function that defines some operators for parser
     composition.
     """
@@ -87,25 +19,26 @@ class Parser(object):
         self.name = name
         return self
 
-    def define(self, p):
+    def define(self, parser):
         """Defines a parser wrapped into this object."""
         lazy_getter = (
-            lambda *args, **kwargs: getattr(p, 'run', p)(*args, **kwargs)
+            lambda *args, **kwargs:
+                getattr(parser, 'run', parser)(*args, **kwargs)
         )
         if debug:
             setattr(self, '_run', lazy_getter)
         else:
             setattr(self, 'run', lazy_getter)
-        self.named(getattr(p, 'name', p.__doc__))
+        self.named(getattr(parser, 'name', parser.__doc__))
 
-    def run(self, tokens, s):
+    def run(self, tokens, state):
         """Sequence(a), State -> (b, State)
 
         Runs a parser wrapped into this object.
         """
         if debug:
             log.debug('trying %s' % self.name)
-        return self._run(tokens, s)
+        return self._run(tokens, state)
 
     def _run(self, tokens, s):
         raise NotImplementedError('you must define() a parser')
@@ -222,7 +155,7 @@ class Parser(object):
         return _bind
 
 
-class State(object):
+class State:
     """A parsing state that is maintained basically for error reporting.
 
     It consists of the current position pos in the sequence being parsed and
@@ -242,6 +175,7 @@ class State(object):
 
 
 class NoParseError(Exception):
+
     def __init__(self, msg='', state=None):
         self.msg = msg
         self.state = state
@@ -255,6 +189,7 @@ class _Tuple(tuple):
 
 
 class _Ignored(object):
+
     def __init__(self, value):
         self.value = value
 
