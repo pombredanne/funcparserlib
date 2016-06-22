@@ -1,21 +1,13 @@
-# -*- coding: utf-8 -*-
-
-from setuptools import setup
-import sys
-
-extra = {}
-if sys.version_info >= (3,):
-    extra['use_2to3'] = True
+import setuptools
 
 
-setup(
-    name='funcparserlib',
-    version='0.3.6',
-    packages=['funcparserlib', 'funcparserlib.tests'],
-    author='Andrey Vlasovskikh',
-    author_email='andrey.vlasovskikh@gmail.com',
-    description='Recursive descent parsing library based on functional '
-        'combinators',
+setuptools.setup(
+    name='myparserlib',
+    version='0.0.1',
+    packages=setuptools.find_packages(),
+    install_requires=['pytest'],
+    author='magniff',
+    author_email='tinysnippets@gmail.com',
+    description='Enhanced fork of myparserlib.',
     license='MIT',
-    url='http://code.google.com/p/funcparserlib/',
-    **extra)
+)

@@ -1,79 +1,4 @@
-# -*- coding: utf-8 -*-
-
-# Copyright (c) 2008/2013 Andrey Vlasovskikh
-#
-# Permission is hereby granted, free of charge, to any person obtaining
-# a copy of this software and associated documentation files (the
-# "Software"), to deal in the Software without restriction, including
-# without limitation the rights to use, copy, modify, merge, publish,
-# distribute, sublicense, and/or sell copies of the Software, and to
-# permit persons to whom the Software is furnished to do so, subject to
-# the following conditions:
-#
-# The above copyright notice and this permission notice shall be included
-# in all copies or substantial portions of the Software.
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
-# EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
-# IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
-# CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
-# TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
-# SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-
-"""A recurisve descent parser library based on functional combinators.
-
-Basic combinators are taken from Harrison's book ["Introduction to Functional
-Programming"][1] and translated from ML into Python. See also [a Russian
-translation of the book][2].
-
-  [1]: http://www.cl.cam.ac.uk/teaching/Lectures/funprog-jrh-1996/
-  [2]: http://code.google.com/p/funprog-ru/
-
-A parser `p` is represented by a function of type:
-
-    p :: Sequence(a), State -> (b, State)
-
-that takes as its input a sequence of tokens of arbitrary type `a` and a
-current parsing state and return a pair of a parsed token of arbitrary type
-`b` and the new parsing state.
-
-The parsing state includes the current position in the sequence being parsed and
-the position of the rightmost token that has been consumed while parsing.
-
-Parser functions are wrapped into an object of the class `Parser`. This class
-implements custom operators `+` for sequential composition of parsers, `|` for
-choice composition, `>>` for transforming the result of parsing. The method
-`Parser.parse` provides an easier way for invoking a parser hiding details
-related to a parser state:
-
-    Parser.parse :: Parser(a, b), Sequence(a) -> b
-
-Altough this module is able to deal with a sequences of any kind of objects, the
-recommended way of using it is applying a parser to a `Sequence(Token)`.
-`Token` objects are produced by a regexp-based tokenizer defined in
-`funcparserlib.lexer`. By using it this way you get more readable parsing error
-messages (as `Token` objects contain their position in the source file) and good
-separation of lexical and syntactic levels of the grammar. See examples for more
-info.
-
-Debug messages are emitted via a `logging.Logger` object named
-`"funcparserlib"`.
-"""
-
-__all__ = [
-    'some', 'a', 'many', 'pure', 'finished', 'maybe', 'skip', 'oneplus',
-    'forward_decl', 'NoParseError',
-]
-
-import logging
-
-log = logging.getLogger('funcparserlib')
-
-debug = False
-
-
-class Parser(object):
+class Parser:
     """A wrapper around a parser function that defines some operators for parser
     composition.
     """
@@ -87,26 +12,24 @@ class Parser(object):
         self.name = name
         return self
 
-    def define(self, p):
+    def define(self, parser):
         """Defines a parser wrapped into this object."""
-        f = getattr(p, 'run', p)
-        if debug:
-            setattr(self, '_run', f)
-        else:
-            setattr(self, 'run', f)
-        self.named(getattr(p, 'name', p.__doc__))
+        lazy_getter = (
+            lambda *args, **kwargs:
+                getattr(parser, 'run', parser)(*args, **kwargs)
+        )
+        self.run = lazy_getter
+        self.named(getattr(parser, 'name', parser.__doc__))
 
-    def run(self, tokens, s):
+    def run(self, tokens, state):
         """Sequence(a), State -> (b, State)
 
         Runs a parser wrapped into this object.
         """
-        if debug:
-            log.debug(u'trying %s' % self.name)
-        return self._run(tokens, s)
+        return self._run(tokens, state)
 
-    def _run(self, tokens, s):
-        raise NotImplementedError(u'you must define() a parser')
+    def _run(self, tokens, state):
+        raise NotImplementedError('you must define() a parser')
 
     def parse(self, tokens):
         """Sequence(a) -> b
@@ -120,13 +43,13 @@ class Parser(object):
         try:
             (tree, _) = self.run(tokens, State())
             return tree
-        except NoParseError, e:
+        except NoParseError as e:
             max = e.state.max
             if len(tokens) > max:
                 tok = tokens[max]
             else:
-                tok = u'<EOF>'
-            raise NoParseError(u'%s: %s' % (e.msg, tok), e.state)
+                tok = '<EOF>'
+            raise NoParseError('%s: %s' % (e.msg, tok), e.state)
 
     def __add__(self, other):
         """Parser(a, b), Parser(a, c) -> Parser(a, _Tuple(b, c))
@@ -160,7 +83,7 @@ class Parser(object):
 
         # or in terms of bind and pure:
         # _add = self.bind(lambda x: other.bind(lambda y: pure(magic(x, y))))
-        _add.name = u'(%s , %s)' % (self.name, other.name)
+        _add.name = '(%s , %s)' % (self.name, other.name)
         return _add
 
     def __or__(self, other):
@@ -177,10 +100,10 @@ class Parser(object):
         def _or(tokens, s):
             try:
                 return self.run(tokens, s)
-            except NoParseError, e:
+            except NoParseError as e:
                 return other.run(tokens, State(s.pos, e.state.max))
 
-        _or.name = u'(%s | %s)' % (self.name, other.name)
+        _or.name = '(%s | %s)' % (self.name, other.name)
         return _or
 
     def __rshift__(self, f):
@@ -201,7 +124,7 @@ class Parser(object):
 
         # or in terms of bind and pure:
         # _shift = self.bind(lambda x: pure(f(x)))
-        _shift.name = u'(%s)' % (self.name,)
+        _shift.name = '(%s)' % (self.name,)
         return _shift
 
     def bind(self, f):
@@ -216,11 +139,11 @@ class Parser(object):
             (v, s2) = self.run(tokens, s)
             return f(v).run(tokens, s2)
 
-        _bind.name = u'(%s >>=)' % (self.name,)
+        _bind.name = '(%s >>=)' % (self.name,)
         return _bind
 
 
-class State(object):
+class State:
     """A parsing state that is maintained basically for error reporting.
 
     It consists of the current position pos in the sequence being parsed and
@@ -233,14 +156,15 @@ class State(object):
         self.max = max
 
     def __str__(self):
-        return unicode((self.pos, self.max))
+        return str((self.pos, self.max))
 
     def __repr__(self):
-        return u'State(%r, %r)' % (self.pos, self.max)
+        return 'State(%r, %r)' % (self.pos, self.max)
 
 
 class NoParseError(Exception):
-    def __init__(self, msg=u'', state=None):
+
+    def __init__(self, msg='', state=None):
         self.msg = msg
         self.state = state
 
@@ -253,11 +177,12 @@ class _Tuple(tuple):
 
 
 class _Ignored(object):
+
     def __init__(self, value):
         self.value = value
 
     def __repr__(self):
-        return u'_Ignored(%s)' % repr(self.value)
+        return '_Ignored(%s)' % repr(self.value)
 
 
 @Parser
@@ -269,10 +194,10 @@ def finished(tokens, s):
     if s.pos >= len(tokens):
         return None, s
     else:
-        raise NoParseError(u'should have reached <EOF>', s)
+        raise NoParseError('should have reached <EOF>', s)
 
 
-finished.name = u'finished'
+finished.name = 'finished'
 
 
 def many(p):
@@ -291,10 +216,10 @@ def many(p):
             while True:
                 (v, s) = p.run(tokens, s)
                 res.append(v)
-        except NoParseError, e:
+        except NoParseError as e:
             return res, State(s.pos, e.state.max)
 
-    _many.name = u'{ %s }' % p.name
+    _many.name = '{ %s }' % p.name
     return _many
 
 
@@ -307,21 +232,17 @@ def some(pred):
     @Parser
     def _some(tokens, s):
         if s.pos >= len(tokens):
-            raise NoParseError(u'no tokens left in the stream', s)
+            raise NoParseError('no tokens left in the stream', s)
         else:
             t = tokens[s.pos]
             if pred(t):
                 pos = s.pos + 1
                 s2 = State(pos, max(pos, s.max))
-                if debug:
-                    log.debug(u'*matched* "%s", new state = %s' % (t, s2))
                 return t, s2
             else:
-                if debug:
-                    log.debug(u'failed "%s", state = %s' % (t, s))
-                raise NoParseError(u'got unexpected token', s)
+                raise NoParseError('got unexpected token', s)
 
-    _some.name = u'(some)'
+    _some.name = '(some)'
     return _some
 
 
@@ -331,7 +252,7 @@ def a(value):
     Returns a parser that parses a token that is equal to the value value.
     """
     name = getattr(value, 'name', value)
-    return some(lambda t: t == value).named(u'(a "%s")' % (name,))
+    return some(lambda t: t == value).named('(a "%s")' % (name,))
 
 
 def pure(x):
@@ -339,7 +260,7 @@ def pure(x):
     def _pure(_, s):
         return x, s
 
-    _pure.name = u'(pure %r)' % (x,)
+    _pure.name = '(pure %r)' % (x,)
     return _pure
 
 
@@ -351,7 +272,7 @@ def maybe(p):
     NOTE: In a statically typed language, the type Maybe b could be more
     approprieate.
     """
-    return (p | pure(None)).named(u'[ %s ]' % (p.name,))
+    return (p | pure(None)).named('[ %s ]' % (p.name,))
 
 
 def skip(p):
@@ -374,7 +295,7 @@ def oneplus(p):
         (v2, s3) = many(p).run(tokens, s2)
         return [v1] + v2, s3
 
-    _oneplus.name = u'(%s , { %s })' % (p.name, p.name)
+    _oneplus.name = '(%s , { %s })' % (p.name, p.name)
     return _oneplus
 
 
@@ -404,11 +325,6 @@ def forward_decl():
 
     @Parser
     def f(tokens, s):
-        raise NotImplementedError(u'you must define() a forward_decl somewhere')
+        raise NotImplementedError('you must define() a forward_decl somewhere')
 
     return f
-
-
-if __name__ == '__main__':
-    import doctest
-    doctest.testmod()
